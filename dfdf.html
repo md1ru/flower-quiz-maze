@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>랜덤 미로 퀴즈 찾기 (만 5세 맞춤)</title>
+    <style>
+        body { font-family: 'Malgun Gothic', 'Dotum', sans-serif; display: flex; flex-direction: column; align-items: center; background-color: #e8f5e9; padding: 20px; }
+        h1 { color: #388e3c; margin-bottom: 10px; }
+        .game-info { color: #555; margin-bottom: 20px; font-size: 14px; }
+        
+        /* 미로 스타일: 초록색 풀숲 */
+        #maze-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 60px); /* 5x5 미로 */
+            grid-template-rows: repeat(5, 60px);
+            border: 4px solid #388e3c;
+            background-color: #81c784; /* 풀밭 색 */
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        .cell {
+            width: 60px;
+            height: 60px;
+            background-color: #81c784;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 30px;
+            cursor: default;
+            border: 1px solid #66bb6a;
+        }
+        .path { background-color: #a5d6a7; } /* 움직일 수 있는 길 */
+        .wall { background-color: #4caf50; } /* 벽 */
+        
+        /* 특수 칸 */
+        .start { background-color: #ffe082; }
+        .goal { background-color: #ff8a65; }
+        .visited { background-color: #c8e6c9; } /* 지나온 길 (색깔로 표시) */
+        
+        /* 캐릭터 (꽃을 든 소녀) */
+        .player { font-size: 40px; } /* 꽃을 든 소녀 모양: 👧🏻💐 */
+        
+        /* 퀴즈 창 */
+        #quiz-overlay {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+        }
+        .quiz-box {
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 15px;
+            text-align: center;
+            width: 80%;
+            max-width: 400px;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.3);
+            border: 5px solid #ffab91;
+        }
+        .quiz-box h3 { color: #e57373; margin-top: 0; }
+        .quiz-box button {
+            padding: 10px 20px;
+            margin: 10px;
+            font-size: 18px;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            transition: background-color 0.2s;
+        }
+        #btn-o { background-color: #42a5f5; color: white; }
+        #btn-x { background-color: #ef5350; color: white; }
+        #btn-o:hover { background-color: #2196f3; }
+        #btn-x:hover { background-color: #e53935; }
+        
+        /* 승리 창 */
+        #win-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background-color: rgba(255, 255, 255, 0.95);
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            z-index: 20;
+        }
+        #win-overlay h2 { color: #f9a825; font-size: 40px; }
+        #win-overlay p { font-size: 20px; color: #388e3c; }
+        #reset-button {
+            padding: 10px 20px;
+            font-size: 18px;
+            margin-top: 20px;
+            background-color: #388e3c;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        #reset-button:hover {
+            background-color: #2e7d32;
+        }
+    </style>
+</head>
+<body onload="initGame()">
+
+    <h1>🌹 꽃을 든 소녀의 퀴즈 미로 찾기 🌷</h1>
+    <div class="game-info">
+        키보드의 화살표 (↑ ↓ ← →) 키를 눌러 소녀를 움직여보세요! (다음 퀴즈 순서: <span id="quiz-count">1</span> / 20)
+    </div>
+    
+    <div id="maze-grid">
+        </div>
+
+    <div id="quiz-overlay">
+        <div class="quiz-box">
+            <h3>미션! 이 길을 지나려면 문제를 풀어야 해요! (퀴즈 <span id="quiz-num"></span>)</h3>
+            <p id="quiz-text"></p>
+            <p id="quiz-answer-status" style="color: red;"></p>
+            <button id="btn-o">O</button>
+            <button id="btn-x">X</button>
+        </div>
+    </div>
+
+    <div id="win-overlay">
+        <h2>🎉 성공! 할머니를 만났어요! 🎉</h2>
+        <p>우리 소녀가 할머니에게 예쁜 꽃을 선물했습니다!</p>
+        <div style="font-size: 80px;">👵🏻💐👧🏻</div>
+        <button id="reset-button" onclick="resetGame()">새로운 미로 시작하기</button>
+    </div>
+
+    <script>
+        // ----------------------------------------------------
+        // 1. 퀴즈 데이터: 만 5세 수준의 꽃과 식물 관련 O/X 퀴즈 20개
+        // ----------------------------------------------------
+        const quizzes = [
+            { q: "꽃이 시들지 않게 하려면 물을 줘야 한다.", a: "O" }, // 1
+            { q: "해바라기는 햇님을 좋아해서 해가 있는 곳을 따라 움직인다.", a: "O" }, // 2
+            { q: "모든 꽃은 빨간색이다.", a: "X" }, // 3
+            { q: "벌이 꽃에 오면 꽃은 아프다.", a: "X" }, // 4
+            { q: "나무는 풀보다 키가 훨씬 크다.", a: "O" }, // 5
+            { q: "예쁜 장미꽃의 줄기에는 뾰족한 가시가 하나도 없다.", a: "X" }, // 6
+            { q: "씨앗을 흙 속에 묻어야 예쁜 꽃이 나온다.", a: "O" }, // 7
+            { q: "꽃은 빨간색, 노란색, 파란색 등 여러 가지 색깔이 있다.", a: "O" }, // 8
+            { q: "잎이 없는 식물도 숨을 쉴 수 있다.", a: "X" }, // 9
+            { q: "민들레 홀씨는 바람을 타고 멀리멀리 날아간다.", a: "O" }, // 10
+            { q: "우리가 먹는 밥(쌀)도 식물이 키운 곡식이다.", a: "O" }, // 11
+            { q: "귤 나무에서는 사과가 열린다.", a: "X" }, // 12
+            { q: "물을 많이 줄수록 꽃은 더 빨리 자란다.", a: "X" }, // 13
+            { q: "꽃잎의 예쁜 색깔은 벌과 나비를 불러들이는 역할을 한다.", a: "O" }, // 14
+            { q: "땅 속에는 식물의 뿌리가 숨어있다.", a: "O" }, // 15
+            { q: "씨앗을 심은 지 하루 만에 모두 싹이 돋아난다.", a: "X" }, // 16
+            { q: "튤립은 꽃병에 꽂아도 계속 키가 조금씩 자랄 수 있다.", a: "O" }, // 17
+            { q: "밤이 되면 식물도 우리처럼 잠을 잔다.", a: "O" }, // 18
+            { q: "코끼리는 꽃을 아주 좋아해서 자주 먹는다.", a: "X" }, // 19
+            { q: "무궁화는 우리나라의 꽃이다.", a: "O" }  // 20
+        ];
+
+        // ----------------------------------------------------
+        // 2. 미로 구조 및 초기 설정
+        // ----------------------------------------------------
+        
+        const SIZE = 5;
+        let MAZE = []; // 미로 구조 (랜덤 생성)
+        let playerPos = { row: 0, col: 0 }; // 시작 위치
+        let goalPos = { row: SIZE - 1, col: SIZE - 1 }; // 목적지 위치
+        let quizIndexCounter = 0; // 현재 순서대로 내야 할 퀴즈 번호
+        let pendingMove = null; // 퀴즈를 풀면 실행할 다음 이동
+
+        // DOM 요소
+        const $grid = document.getElementById('maze-grid');
+        const $quizOverlay = document.getElementById('quiz-overlay');
+        const $quizText = document.getElementById('quiz-text');
+        const $quizStatus = document.getElementById('quiz-answer-status');
+        const $quizCount = document.getElementById('quiz-count');
+        const $quizNum = document.getElementById('quiz-num');
+        const $winOverlay = document.getElementById('win-overlay');
+
+        // ----------------------------------------------------
+        // 3. 랜덤 미로 생성 로직 (재귀적 백트래킹)
+        // ----------------------------------------------------
+        function createMaze() {
+            // 초기 미로: 1(벽)로 가득 채움
+            MAZE = Array(SIZE).fill(0).map(() => Array(SIZE).fill(1));
+            
+            const directions = [[0, 2], [0, -2], [2, 0], [-2, 0]]; // 상하좌우 두 칸 이동 (길을 뚫기 위해)
+
+            function shuffle(array) {
+                for (let i = array.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [array[i], array[j]] = [array[j], array[i]];
+                }
+            }
+
+            function carvePath(r, c) {
+                MAZE[r][c] = 0; // 현재 칸을 길로 만듦
+                
+                let shuffledDirections = [...directions];
+                shuffle(shuffledDirections);
+
+                for (const [dr, dc] of shuffledDirections) {
+                    const nextR = r + dr;
+                    const nextC = c + dc;
+                    const wallR = r + dr / 2;
+                    const wallC = c + dc / 2;
+
+                    if (nextR >= 0 && nextR < SIZE && nextC >= 0 && nextC < SIZE && MAZE[nextR][nextC] === 1) {
+                        MAZE[wallR][wallC] = 0; // 중간의 벽을 길로 만듦
+                        carvePath(nextR, nextC);
+                    }
+                }
+            }
+            
+            // 미로 생성 시작점은 (0, 0)
+            carvePath(0, 0);
+
+            // 시작점(2)과 도착점(3) 설정
+            MAZE[0][0] = 2; // 시작 (0,0)
+            MAZE[SIZE - 1][SIZE - 1] = 3; // 목적지 (4,4)
+            
+            // 미로 중간에 꽃 장식 칸 추가 (선택적)
+            // 길(0)이었던 칸 중 일부를 장식 칸(4)으로 변경
+            if (MAZE[1][1] === 0) MAZE[1][1] = 4;
+            if (MAZE[3][3] === 0) MAZE[3][3] = 4;
+            if (MAZE[1][3] === 0) MAZE[1][3] = 4;
+        }
+
+        // ----------------------------------------------------
+        // 4. 게임 초기화 및 그리기
+        // ----------------------------------------------------
+        function drawMaze() {
+            $grid.innerHTML = '';
+            for (let r = 0; r < SIZE; r++) {
+                for (let c = 0; c < SIZE; c++) {
+                    const cell = document.createElement('div');
+                    cell.classList.add('cell');
+                    cell.id = `cell-${r}-${c}`;
+
+                    const cellType = MAZE[r][c];
+                    if (cellType === 0) cell.classList.add('path');
+                    else if (cellType === 1) cell.classList.add('wall');
+                    else if (cellType === 2) cell.classList.add('start'); 
+                    else if (cellType === 3) { // 목적지 (할머니)
+                        cell.classList.add('goal');
+                        cell.innerHTML = '👵🏻'; 
+                    }
+                    else if (cellType === 4) { // 꽃이 피어있는 칸 (장식)
+                        cell.classList.add('path'); // 길의 일종
+                        cell.innerHTML = '🌷'; 
+                    }
+
+                    $grid.appendChild(cell);
+                }
+            }
+            drawPlayer();
+            updateQuizCount();
+        }
+
+        function drawPlayer() {
+            // 이전 위치의 소녀 지우기 및 '지나온 길' 표시
+            const prevPlayerCell = document.querySelector('.player');
+            if (prevPlayerCell) {
+                const prevR = parseInt(prevPlayerCell.id.split('-')[1]);
+                const prevC = parseInt(prevPlayerCell.id.split('-')[2]);
+                const prevType = MAZE[prevR][prevC];
+
+                // 이전 칸 내용 복원
+                prevPlayerCell.innerHTML = (prevType === 3 ? '👵🏻' : (prevType === 4 ? '🌷' : ''));
+                prevPlayerCell.classList.remove('player');
+                
+                // 길이었던 칸은 '지나온 길'로 표시
+                if (prevType === 0 || prevType === 4) {
+                    prevPlayerCell.classList.add('visited');
+                    prevPlayerCell.classList.remove('path');
+                }
+            }
+
+            // 새 위치에 소녀 그리기
+            const currentCell = document.getElementById(`cell-${playerPos.row}-${playerPos.col}`);
+            if (currentCell) {
+                currentCell.classList.add('player');
+                currentCell.innerHTML = '👧🏻💐'; // 꽃을 든 소녀
+                currentCell.classList.remove('visited'); // 현재 칸은 지나온 길이 아님
+            }
+        }
+
+        function updateQuizCount() {
+            const nextQuizNumber = quizIndexCounter + 1;
+            // 퀴즈 수가 20개를 넘어가면 20으로 고정 표시
+            $quizCount.textContent = `${nextQuizNumber > quizzes.length ? quizzes.length : nextQuizNumber}`; 
+        }
+
+        // ----------------------------------------------------
+        // 5. 움직임 및 퀴즈 관련 로직
+        // ----------------------------------------------------
+        function tryMove(dr, dc) {
+            if ($quizOverlay.style.display === 'flex') return; // 퀴즈 풀고 있을 때는 움직임 금지
+
+            const newRow = playerPos.row + dr;
+            const newCol = playerPos.col + dc;
+
+            // 1. 미로 범위를 벗어나거나 벽인지 확인
+            if (newRow < 0 || newRow >= SIZE || newCol < 0 || newCol >= SIZE || MAZE[newRow][newCol] === 1) return;
+            
+            // 2. 움직임 없음 (제자리 입력)
+            if (newRow === playerPos.row && newCol === playerPos.col) return;
+
+            const nextCellType = MAZE[newRow][newCol];
+            const nextCell = document.getElementById(`cell-${newRow}-${newCol}`);
+
+            // 3. 최종 목적지 도착 (퀴즈와 상관없이 클리어!)
+            if (nextCellType === 3) {
+                executeMove(newRow, newCol);
+                return;
+            }
+
+            // 4. 새로운 길 진입 시 퀴즈 제시
+            // (길 타입 0, 4) 이면서 (방문한 적이 없는 칸) 이면서 (남은 퀴즈가 있을 때)
+            if ((nextCellType === 0 || nextCellType === 4) && !nextCell.classList.contains('visited') && quizIndexCounter < quizzes.length) {
+                
+                pendingMove = { row: newRow, col: newCol }; // 이동 정보 저장
+                showQuiz(quizzes[quizIndexCounter].q, quizIndexCounter + 1);
+                return; // 퀴즈를 풀기 전까지는 이동하지 않음
+            }
+            
+            // 5. 이미 지나온 길로 돌아가거나, 모든 퀴즈를 다 풀었거나, 시작 칸으로 이동할 때 (퀴즈 없이 이동 허용)
+            executeMove(newRow, newCol);
+        }
+
+        function executeMove(newRow, newCol) {
+            playerPos = { row: newRow, col: newCol };
+            drawPlayer();
+
+            const nextCellType = MAZE[newRow][newCol];
+
+            // 목적지에 도착했는지 확인
+            if (nextCellType === 3) {
+                $winOverlay.style.display = 'flex'; // 승리 창 표시
+            }
+        }
+
+
+        function showQuiz(question, number) {
+            $quizNum.textContent = number;
+            $quizText.textContent = question;
+            $quizStatus.textContent = '';
+            $quizOverlay.style.display = 'flex';
+        }
+
+        // 퀴즈 정답 확인 함수
+        function checkAnswer(userAnswer) {
+            const correct = quizzes[quizIndexCounter].a;
+
+            if (userAnswer === correct) {
+                // 정답!
+                $quizStatus.textContent = '🎉 정답입니다! 다음 길로 갈 수 있게 되었어요.';
+                $quizStatus.style.color = '#388e3c';
+                
+                // 퀴즈 카운터 증가 (퀴즈를 맞힐 때만 증가)
+                quizIndexCounter++;
+                updateQuizCount();
+
+                // 저장해 둔 이동 실행
+                if (pendingMove) {
+                    setTimeout(() => {
+                        $quizOverlay.style.display = 'none';
+                        executeMove(pendingMove.row, pendingMove.col);
+                        pendingMove = null;
+                    }, 800);
+                }
+            } else {
+                // 오답! (문제를 다시 풀게 함)
+                $quizStatus.textContent = '🤔 아쉽지만 틀렸어요. 다시 한번 생각해서 풀어보세요!';
+                $quizStatus.style.color = 'red';
+            }
+        }
+        
+        // ----------------------------------------------------
+        // 6. 이벤트 리스너 및 게임 시작/리셋
+        // ----------------------------------------------------
+        document.addEventListener('keydown', (e) => {
+            // 퀴즈 창이 열려 있을 때 O/X 입력 처리
+            if ($quizOverlay.style.display === 'flex') {
+                if (e.key.toUpperCase() === 'O') checkAnswer('O');
+                if (e.key.toUpperCase() === 'X') checkAnswer('X');
+                return;
+            }
+
+            // 퀴즈 창이 닫혀 있을 때 이동 입력 처리
+            switch (e.key) {
+                case 'ArrowUp': tryMove(-1, 0); break;
+                case 'ArrowDown': tryMove(1, 0); break;
+                case 'ArrowLeft': tryMove(0, -1); break;
+                case 'ArrowRight': tryMove(0, 1); break;
+            }
+        });
+        
+        // O/X 버튼 클릭 이벤트
+        document.getElementById('btn-o').addEventListener('click', () => checkAnswer('O'));
+        document.getElementById('btn-x').addEventListener('click', () => checkAnswer('X'));
+        
+        // 게임 초기화 (미로 생성 및 변수 리셋)
+        function initGame() {
+            createMaze();
+            playerPos = { row: 0, col: 0 };
+            quizIndexCounter = 0;
+            $winOverlay.style.display = 'none';
+            drawMaze();
+        }
+
+        // 게임 리셋 (새로운 미로 생성)
+        function resetGame() {
+            initGame();
+        }
+
+        // 창이 로드될 때 initGame 실행 (body onload에 설정됨)
+    </script>
+
+</body>
+</html>
